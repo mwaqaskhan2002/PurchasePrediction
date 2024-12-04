@@ -1,24 +1,32 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import  HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import RedirectResponse
+from dotenv import load_dotenv
+import os
 import pickle
 
-# Initialize FastAPI app
+load_dotenv()
 app = FastAPI()
-
-# Load the trained model
+security = HTTPBearer()
 knn = pickle.load(open("model.pkl", "rb"))
 
-# Define request body model
-class PredictionRequest(BaseModel):
-    age: int  
-    salary: int 
+API_KEY = os.getenv("API_KEY")
 
-# Define API endpoint for prediction
+def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if credentials.credentials != API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key"
+        )
+
+
+@app.get("/")
+def read_root():
+    return RedirectResponse(url="/docs")
+
 @app.post("/predict")
-def predict(data: PredictionRequest):
+def predict(age: int, salary: int, credentials: HTTPAuthorizationCredentials = Depends(security)):
     
-    age = data.age
-    salary = data.salary
     result = knn.predict([[age, salary]])[0]
     if result == 1:
         prediction = "Eligible to purchase" 
@@ -27,6 +35,4 @@ def predict(data: PredictionRequest):
     
     return {"prediction": prediction, "result": int(result)}
 
-if __name__ == '__main__':
-    import uvicorn
-    uvicorn.run (app, host="localhost", port=8000)
+
